@@ -43,7 +43,7 @@ def export(cursor, db_name):
 def _import(cursor, db_name):
     conflicts = 0
     answers = ""
-    if db_name:
+    if os.path.exists(db_name):
         db_name = db_name.lower()
         if not db_name.endswith(".csv"):
             db_name = "%s.csv" % db_name
