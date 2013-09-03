@@ -1,22 +1,24 @@
 #!/usr/bin/env python
-
+#encoding:UTF-8
 import os
 import sys
 import sqlite3
 import csv
 
-
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013"
-__version__ = "0.02"
+__version__ = "0.03"
 
-
+#FIXME:
+    #import and  export with the right encoding(utf8 instead of cpm 852)
+#TODO:
+    #transparent database compression
+COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
+         "price", "condition", "special", "comment")
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
                         "region[PAL]", "price[5]", "condition[2]", "special['']", "comment['']")
 YES, NO = ("y", "yes"), ("n", "no")
-
-#sql injection friendly ;)
 
 def db_init(db_name):
     connection = sqlite3.connect(db_name)
@@ -128,11 +130,12 @@ def update(cursor, where):
         query = "%s where title='%s'" % (query[:-1], row[0])
         print  _update(cursor, query)
         if rows_count > 1:
-            if raw_input("continue(n): ").lower() == NO:
+            if raw_input("continue(n): ").lower() in NO:
                 break
     return ""
                 
 def delete(cursor, where):
+    '''sql injection friendly'''
     answers = ""
     try:
         cursor.execute("delete from collection where %s" % where)
@@ -141,15 +144,21 @@ def delete(cursor, where):
         answers =  "nothing deleted"
     return answers
 
+def prettify(value, idx):
+    return "{:<20}".format(value[:20]) if idx in (0, 8) else "{:<9}".format(value)
+
 def sequel(cursor, where="1=1"):
+    '''sql injection friendly'''
     answer_length = 0
     answers = ""
-    answers += "title|box|manual|cartridge|region|price|condition|special|comment|\n"
+    for idx, column in enumerate(COLUMN_LABELS):
+        answers += "%s|" % prettify(column, idx)
+    answers += "\n\n"
     try:
         for row in cursor.execute("select * from collection where %s" % where):
             answer_length += 1
-            for column in row:
-                answers = "%s%s|" % (answers, str(column) if column else "''")
+            for idx, column in enumerate(row):
+                answers += "%s|" % prettify(column, idx)
             answers += "\n"
     except sqlite3.OperationalError:
         return "nothing found"
@@ -166,13 +175,16 @@ def accept(connection):
             if answer.lower() in NO:
                 return "commit aborted"
 
+def calc(dummy, term):
+    return eval(term)
+
 def gui(conn, cursor):
     commands = {"sequel": sequel, "import": _import, "export": export,
                         "update": update, "delete": delete, "sequel": sequel,
-                        "quit": quit}
+                        "evaluate": calc, "quit": quit}
     
     alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import",
-                "a": "add", "e": "export",  "?": "help", "u": "update", 
+                "a": "add", "e": "export",  "?": "help", "u": "update", "=": "evaluate",
                 "l": "list", "x": "exit", "!": "commit", "q": "quit"}
                         
     read_only = True
@@ -210,7 +222,7 @@ def gui(conn, cursor):
             print commands[command](cursor, parameter) if parameter else "missing argument"
     return True
             
-def main(db_name="collection.db"):
+def main(db_name):
     conn, cursor = db_init(db_name)
     if gui(conn, cursor):
         print accept(conn)
@@ -218,8 +230,12 @@ def main(db_name="collection.db"):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        main(sys.argv[1])
+        if sys.argv[1] != "--info":
+            main(sys.argv[1])
+        else:
+            print "\nauthor: %s\nversion: %s\nlicense: %s\ncopyright: %s" % (__author__, __version__,\
+                                                        __license__, __copyright__)
     else:
-        user_dir = os.getenv("HOME") if os.getenv("HOME") else os.getenv("USERPROFILE")
-        main(os.path.join(user_dir, "collection.db"))
+        home_dir = os.getenv("HOME") if os.getenv("HOME") else os.getenv("USERPROFILE")
+        main(os.path.join(home_dir, "collection.db"))
         
