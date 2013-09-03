@@ -20,6 +20,7 @@ YES, NO = ("y", "yes"), ("n", "no")
 
 def db_init(db_name):
     connection = sqlite3.connect(db_name)
+    connection.text_factory = str
     cursor = connection.cursor()
     try:
         cursor.execute("select * from collection")
