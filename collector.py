@@ -9,7 +9,7 @@ import csv
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013"
-__version__ = "0.01"
+__version__ = "0.02"
 
 
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
@@ -220,5 +220,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         main(sys.argv[1])
     else:
-        main()
+        user_dir = os.getenv("HOME") if os.getenv("HOME") else os.getenv("USERPROFILE")
+        main(os.path.join(user_dir, "collection.db"))
         
