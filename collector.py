@@ -5,6 +5,7 @@ import sys
 import sqlite3
 import csv
 import datetime
+import gzip
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
@@ -14,11 +15,6 @@ __version__ = "0.04"
 if sys.version.startswith("3."):
    raw_input = input
 
-#FIXME:
-    #import and  export with the right encoding(utf8 instead of cpm 852)
-#TODO:
-    #transparent database compression
-    
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
          "price", "condition", "date", "special", "comment")
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
@@ -28,12 +24,13 @@ YES, NO = ("y", "yes"), ("n", "no")
 long_names = False
 
 def db_init(db_name):
-    connection = sqlite3.connect(db_name)
+    connection = sqlite3.connect(":memory:")
     connection.text_factory = str
     cursor = connection.cursor()
-    try:
-        cursor.execute("select * from collection")
-    except sqlite3.OperationalError:
+    if os.path.exists(db_name):
+        with gzip.open(db_name, "rb") as gz:
+            cursor.executescript(gz.read())
+    else:
         ret = cursor.execute("""create table collection(
                         title primary key, box, manual, cartridge, region, 
                         price, condition, date, special, comment)""")
@@ -107,7 +104,7 @@ def insert(cursor):
                 answer[-1] = 5
             elif "date" in column_identifier and not answer[-1]:
                 now = datetime.datetime.now()
-                answer[-1] = "%d%02d" % (now.year % 100, now.month)
+                answer[-1] = int("%d%02d" % (now.year % 100, now.month))
             break
 
     return "one row added" if not raw_insert(cursor, answer).startswith("nothing") else "error, maybe locked"
@@ -184,10 +181,11 @@ def sequel(cursor, where="1=1"):
         return "nothing found"
     return "%s%d entries" % (answers, answer_length)
 
-def accept(connection):
+def accept(connection, db_name):
     while True:
         try:
             connection.commit()
+            write_back(connection, db_name)
             return "commited"
         except sqlite3.OperationalError:
             print("database maybe locked")
@@ -198,7 +196,7 @@ def accept(connection):
 def calc(dummy, term):
     return eval(term)
 
-def gui(conn, cursor):
+def gui(conn, cursor, db_name):
     commands = {"sequel": sequel, "import": _import, "export": export,
                         "update": update, "delete": delete, "sequel": sequel,
                         "evaluate": calc, "quit": quit}
@@ -229,7 +227,7 @@ def gui(conn, cursor):
         elif command == alias["x"]:
             break
         elif command == alias["!"]:
-            print(accept(conn))
+            print(accept(conn, db_name))
         elif command == alias["?"]:
             print(alias)
         elif command == alias["q"]:
@@ -244,12 +242,19 @@ def gui(conn, cursor):
         else:
             print(commands[command](cursor, parameter) if parameter else "missing argument")
     return True
+ 
+def write_back(conn, db_name):
+    with gzip.open(db_name, "w") as zf:
+        for line in conn.iterdump():
+            zf.write("%s\n" % line)
             
 def main(db_name):
     conn, cursor = db_init(db_name)
-    if gui(conn, cursor):
-        print(accept(conn))
+    if gui(conn, cursor, db_name):
+        print("%s and application terminated" % accept(conn, db_name))
     cursor.close()
+    write_back(conn, db_name)
+    
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
@@ -257,8 +262,8 @@ if __name__ == "__main__":
             main(sys.argv[1])
         else:
             print("\nname: %s\nversion: %s\nlicense: %s\ncopyright: %s" % (__file__[:-3], __version__,\
-                                                        __license__, __copyright__))
+                                                    __license__, __copyright__))
     else:
         home_dir = os.getenv("HOME") if os.getenv("HOME") else os.getenv("USERPROFILE")
-        main(os.path.join(home_dir, "collection.db"))
+        main(os.path.join(home_dir, "collect_dump.gz"))
         
