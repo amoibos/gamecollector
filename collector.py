@@ -12,7 +12,7 @@ __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
 __version__ = "0.04"
 
-if sys.version.startswith("3."):
+if sys.version_info()[0] == 3:
    raw_input = input
 
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
