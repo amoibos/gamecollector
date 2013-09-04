@@ -4,6 +4,7 @@ import os
 import sys
 import sqlite3
 import csv
+import datetime
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
@@ -21,7 +22,7 @@ if sys.version.startswith("3."):
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
          "price", "condition", "date", "special", "comment")
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
-                        "region[PAL]", "price[5]", "condition[2]", "date[1301]", "special['']", "comment['']")
+                        "region[PAL]", "price[5]", "condition[2]", "date[TODAY]", "special['']", "comment['']")
 YES, NO = ("y", "yes"), ("n", "no")
 
 long_names = False
@@ -105,7 +106,8 @@ def insert(cursor):
             elif "price" in column_identifier and not answer[-1]:
                 answer[-1] = 5
             elif "date" in column_identifier and not answer[-1]:
-                answer[-1] = 1301
+                now = datetime.datetime.now()
+                answer[-1] = "%d%02d" % (now.year % 100, now.month)
             break
 
     return "one row added" if not raw_insert(cursor, answer).startswith("nothing") else "error, maybe locked"
