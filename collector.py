@@ -12,7 +12,7 @@ __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
 __version__ = "0.04"
 
-if sys.version_info()[0] == 3:
+if sys.version_info[0] == 3:
    raw_input = input
 
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
@@ -54,9 +54,6 @@ def _import(cursor, db_name):
     conflicts = 0
     answers = ""
     if os.path.exists(db_name):
-        db_name = db_name.lower()
-        if not db_name.endswith(".csv"):
-            db_name = "%s.csv" % db_name
         with open(db_name) as f:
             reader = csv.reader(f, delimiter=";")
             for row in reader:
@@ -66,7 +63,7 @@ def _import(cursor, db_name):
                 except sqlite3.IntegrityError:
                     answers += "%s already in database\n" % row[0]
                     conflicts += 1
-        answers += "%d conflicts\n" % conflicts
+        answers += "%d conflicts" % conflicts
     else:
         answers = "file name not found"
     return answers
