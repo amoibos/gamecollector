@@ -191,7 +191,10 @@ def accept(connection, db_name):
                 return "commit aborted"
 
 def calc(dummy, term):
-    return eval(term)
+    try:
+        return eval(term)
+    except SyntaxError:
+        return "syntax error"
 
 def gui(conn, cursor, db_name):
     commands = {"sequel": sequel, "import": _import, "export": export,
@@ -253,7 +256,6 @@ def main(db_name):
     cursor.close()
     write_back(conn, db_name)
     
-
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         if sys.argv[1] != "--info":
