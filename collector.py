@@ -8,17 +8,20 @@ import csv
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013"
-__version__ = "0.03"
+__version__ = "0.04"
 
 #FIXME:
     #import and  export with the right encoding(utf8 instead of cpm 852)
 #TODO:
     #transparent database compression
+    
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
-         "price", "condition", "special", "comment")
+         "price", "condition", "date", "special", "comment")
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
-                        "region[PAL]", "price[5]", "condition[2]", "special['']", "comment['']")
+                        "region[PAL]", "price[5]", "condition[2]", "date[1301]", "special['']", "comment['']")
 YES, NO = ("y", "yes"), ("n", "no")
+
+long_names = False
 
 def db_init(db_name):
     connection = sqlite3.connect(db_name)
@@ -29,7 +32,7 @@ def db_init(db_name):
     except sqlite3.OperationalError:
         ret = cursor.execute("""create table collection(
                         title primary key, box, manual, cartridge, region, 
-                        price, condition, special, comment)""")
+                        price, condition, date, special, comment)""")
     return connection, cursor
 
 def export(cursor, db_name):
@@ -67,7 +70,7 @@ def _import(cursor, db_name):
 def raw_insert(cursor, values):
     answers = ""
     try:
-        cursor.execute("insert into collection values (?,?,?,?,?,?,?,?,?)", values)
+        cursor.execute("insert into collection values (?,?,?,?,?,?,?,?,?,?)", values)
     except sqlite3.OperationalError:
         return "nothing inserted"
     answers = "rows inserted"
@@ -95,6 +98,8 @@ def insert(cursor):
                answer[-1] = 2
             elif "price" in column_identifier and not answer[-1]:
                 answer[-1] = 5
+            elif "date" in column_identifier and not answer[-1]:
+                answer[-1] = 1301
             break
 
     return "one row added" if not raw_insert(cursor, answer).startswith("nothing") else "error, maybe locked"
@@ -118,7 +123,7 @@ def update(cursor, where):
     for row in rows:
         for index, column_identifier in enumerate(TABLE_FORMAT_QUESTIONS):
             title = column_identifier.split('[')[0]
-            type_text = "" if title in ("price", "condition") else "'"
+            type_text = "" if title in ("price", "condition", "date") else "'"
             answer = raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text))
             if answer:
                 attributes.append((title, answer))
@@ -145,15 +150,22 @@ def delete(cursor, where):
     return answers
 
 def prettify(value, idx):
-    return "{:<20}".format(value[:20]) if idx in (0, 8) else "{:<9}".format(value)
-
+    if not long_names:
+        return "{:<19}".format(value[:19]) if COLUMN_LABELS[idx] in ("title", "comment") else "{:<4}".format(str(value)[:4])
+    else:
+        return value
+        
 def sequel(cursor, where="1=1"):
     '''sql injection friendly'''
     answer_length = 0
     answers = ""
     for idx, column in enumerate(COLUMN_LABELS):
         answers += "%s|" % prettify(column, idx)
-    answers += "\n\n"
+    answers += "\n"
+    if not long_names:
+        for idx, column in enumerate(COLUMN_LABELS):
+            answers += "%s|" % prettify("--------------------", idx)
+        answers += "\n"
     try:
         for row in cursor.execute("select * from collection where %s" % where):
             answer_length += 1
@@ -185,7 +197,7 @@ def gui(conn, cursor):
     
     alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import",
                 "a": "add", "e": "export",  "?": "help", "u": "update", "=": "evaluate",
-                "l": "list", "x": "exit", "!": "commit", "q": "quit"}
+                "l": "list", "x": "exit", "!": "commit", "*": "longnames", "q": "quit"}
                         
     read_only = True
     while True:
@@ -203,6 +215,9 @@ def gui(conn, cursor):
         if command == alias["+"]:
             read_only = not read_only
             print "switch to", "read only" if read_only else "write", "mode"
+        elif command == alias["*"]:
+            global long_names
+            long_names = not long_names
         elif command == alias["x"]:
             break
         elif command == alias["!"]:
