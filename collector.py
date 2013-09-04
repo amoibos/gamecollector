@@ -7,8 +7,8 @@ import csv
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
-__copyright__ = "2013"
-__version__ = "0.03"
+__copyright__ = "2013, " + __author__ 
+__version__ = "0.04"
 
 if sys.version.startswith("3."):
    raw_input = input
@@ -133,7 +133,7 @@ def update(cursor, where):
         query = "update collection set "
         for attribute in attributes:
             title, value = attribute[0], attribute[1]
-            string = "'" if title not in ("price", "condition") else ""
+            string = "'" if title not in ("price", "condition", "date") else ""
             query = "%s %s=%s%s%s," % (query, title, string, value, string)
         query = "%s where title='%s'" % (query[:-1], row[0])
         print(_update(cursor, query))
@@ -154,7 +154,7 @@ def delete(cursor, where):
 
 def prettify(value, idx):
     if not long_names:
-        return "{:<19}".format(value[:19]) if COLUMN_LABELS[idx] in ("title", "comment") else "{:<4}".format(str(value)[:4])
+        return "{:<18}".format(value[:18]) if COLUMN_LABELS[idx] in ("title", "comment") else "{:<4}".format(str(value)[:4])
     else:
         return value
         
@@ -251,7 +251,7 @@ if __name__ == "__main__":
         if sys.argv[1] != "--info":
             main(sys.argv[1])
         else:
-            print("\nauthor: %s\nversion: %s\nlicense: %s\ncopyright: %s" % (__author__, __version__,\
+            print("\nname: %s\nversion: %s\nlicense: %s\ncopyright: %s" % (__file__[:-3], __version__,\
                                                         __license__, __copyright__))
     else:
         home_dir = os.getenv("HOME") if os.getenv("HOME") else os.getenv("USERPROFILE")
