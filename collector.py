@@ -224,6 +224,7 @@ def gui(conn, cursor, db_name):
         elif command == alias["*"]:
             global long_names
             long_names = not long_names
+            print("switch to %s mode" % ("long names" if long_names else "shortened names"))
         elif command == alias["x"]:
             break
         elif command == alias["!"]:
