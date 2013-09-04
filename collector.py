@@ -41,10 +41,13 @@ def db_init(db_name):
 def export(cursor, db_name):
     answers = ""
     if db_name:
-        with open(db_name, 'w') as f:
-            writer = csv.writer(f, delimiter=";")
-            writer.writerows(cursor.execute("select * from collection"))
+        try:
+            with open(db_name, 'w') as f:
+                writer = csv.writer(f, delimiter=";")
+                writer.writerows(cursor.execute("select * from collection"))
             answers = "exported to %s" % db_name
+        except IOError:
+            print("inacceptable file name")
     else:
         answers = "file name missing"
     return answers
