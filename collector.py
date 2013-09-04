@@ -8,7 +8,10 @@ import csv
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013"
-__version__ = "0.04"
+__version__ = "0.03"
+
+if sys.version.startswith("3."):
+   raw_input = input
 
 #FIXME:
     #import and  export with the right encoding(utf8 instead of cpm 852)
@@ -119,7 +122,7 @@ def update(cursor, where):
     except sqlite3.OperationalError:
         return "nothing to update"
     rows_count = len(rows)
-    print rows_count, "to update"
+    print("%d to update" % rows_count)
     for row in rows:
         for index, column_identifier in enumerate(TABLE_FORMAT_QUESTIONS):
             title = column_identifier.split('[')[0]
@@ -133,7 +136,7 @@ def update(cursor, where):
             string = "'" if title not in ("price", "condition") else ""
             query = "%s %s=%s%s%s," % (query, title, string, value, string)
         query = "%s where title='%s'" % (query[:-1], row[0])
-        print  _update(cursor, query)
+        print(_update(cursor, query))
         if rows_count > 1:
             if raw_input("continue(n): ").lower() in NO:
                 break
@@ -182,7 +185,7 @@ def accept(connection):
             connection.commit()
             return "commited"
         except sqlite3.OperationalError:
-            print "database maybe locked"
+            print("database maybe locked")
             answer = raw_input("try again[yes]: ")
             if answer.lower() in NO:
                 return "commit aborted"
@@ -206,41 +209,41 @@ def gui(conn, cursor):
             if not raw_command:
                 continue
             command = raw_command.lower().split()[0]
-            if command in alias.keys() + alias.values():
+            if command in alias.keys() or command in alias.values():
                 parameter = raw_command[len(command) + 1:].strip()
                 command = alias[command] if len(command) == 1 else command
                 break
             else:
-                print "not recognised"
+                print("not recognised")
         if command == alias["+"]:
             read_only = not read_only
-            print "switch to", "read only" if read_only else "write", "mode"
+            print("switch to %s mode" % ("read only" if read_only else "write"))
         elif command == alias["*"]:
             global long_names
             long_names = not long_names
         elif command == alias["x"]:
             break
         elif command == alias["!"]:
-            print accept(conn)
+            print(accept(conn))
         elif command == alias["?"]:
-            print alias
+            print(alias)
         elif command == alias["q"]:
-            print "abort and ignore all chances since last commit"
+            print("abort and ignore all chances since last commit")
             return
         elif read_only and command in ("import", "update", "delete", "add"):
-            print "currently in read only mode" 
+            print("currently in read only mode")
         elif command == alias["a"]:
             insert(cursor)
         elif command == alias["l"]:
-            print sequel(cursor)    
+            print(sequel(cursor))   
         else:
-            print commands[command](cursor, parameter) if parameter else "missing argument"
+            print(commands[command](cursor, parameter) if parameter else "missing argument")
     return True
             
 def main(db_name):
     conn, cursor = db_init(db_name)
     if gui(conn, cursor):
-        print accept(conn)
+        print(accept(conn))
     cursor.close()
 
 if __name__ == "__main__":
@@ -248,8 +251,8 @@ if __name__ == "__main__":
         if sys.argv[1] != "--info":
             main(sys.argv[1])
         else:
-            print "\nauthor: %s\nversion: %s\nlicense: %s\ncopyright: %s" % (__author__, __version__,\
-                                                        __license__, __copyright__)
+            print("\nauthor: %s\nversion: %s\nlicense: %s\ncopyright: %s" % (__author__, __version__,\
+                                                        __license__, __copyright__))
     else:
         home_dir = os.getenv("HOME") if os.getenv("HOME") else os.getenv("USERPROFILE")
         main(os.path.join(home_dir, "collection.db"))
