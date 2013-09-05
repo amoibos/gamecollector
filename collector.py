@@ -8,14 +8,11 @@ import datetime
 import gzip
 import platform
 import shutil
-#import locale
-
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
-__version__ = "0.04"
-
+__version__ = "0.05"
 
 if sys.version_info[0] == 3:
    raw_input = input
@@ -25,11 +22,9 @@ COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region",
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
                         "region[PAL]", "price[5]", "condition[2]", "date[TODAY]", "special['']", "comment['']")
 YES, NO = ("y", "yes"), ("n", "no")
-ENCODING = "cp850"#locale.getpreferredencoding()
-
+ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
 
 long_names = False
-
 
 def db_init(db_name):
     connection = sqlite3.connect(":memory:")
@@ -173,6 +168,8 @@ def delete(cursor, where):
     return answers
 
 def prettify(value, idx):
+    if isinstance(value, str) and platform.system() == "Windows" and sys.version_info[0] == 2:
+        value = value.decode("utf-8").encode(ENCODING)
     if not long_names:
         return "{:<18}".format(value[:18]) if COLUMN_LABELS[idx] in ("title", "comment") else "{:<4}".format(str(value)[:4])
     else:
@@ -197,8 +194,7 @@ def sequel(cursor, where="1=1"):
             answers += "\n"
     except sqlite3.OperationalError:
         return "nothing found"
-    #if platform.system() == "Windows" and sys.version_info[0] == 2:
-    #    answer = answers.encode("utf-8").decode(ENCODING)
+    
     return "%s%d entries" % (answers, answer_length)
 
 def accept(connection, db_name):
@@ -232,6 +228,8 @@ def gui(conn, cursor, db_name):
     while True:
         while True:
             raw_command = raw_input(":> ").strip()
+            if sys.version_info[0] == 2:
+                raw_command = raw_command.decode(ENCODING)
             if not raw_command:
                 continue
             command = raw_command.lower().split()[0]
@@ -272,10 +270,12 @@ def write_back(conn, db_name):
         for line in conn.iterdump():
             record = "%s\n" % line 
             try:
-                zf.write(record.encode("utf-8"))
-            except UnicodeDecodeError:
-                zf.write(record.decode(ENCODING).encode("utf-8"))
+                if sys.version_info[0] == 3:
+                    zf.write(record.encode("utf-8"))
+                else:
+                    zf.write(record.decode(ENCODING).encode("utf-8"))
             except:
+                print("error occurs during write back")
                 return False
     return True
             
@@ -286,7 +286,7 @@ def main(db_name):
         backup_name =  db_name+".bak"
         shutil.copyfile(db_name, backup_name)
         os.remove(backup_name if write_back(conn, db_name) else db_name)
-        if not os.path.exists(db_name):
+        if os.path.exists(backup_name):
             os.rename(backup_name, db_name)
     cursor.close()
     
