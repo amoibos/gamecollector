@@ -98,20 +98,20 @@ def insert(cursor):
                     answer.pop(-1)
                     continue
             #boolean types: box, cartridge, manual
-            elif "YES" in column_identifier:
+            elif column_identifier in ("box", "cartridge", "manual"):
                 if not answer[-1] or answer[-1] not in YES + NO:
                     answer[-1] = "true"
                 elif answer[-1].lower() in YES:
                     answer[-1] = "true"
                 elif answer[-1].lower() in NO:
                     answer[-1] = "false"
-            elif (not answer[-1] or answer not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" in column_identifier:
-                answer[-1] = "PAL"
-            elif "condition" in column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
-               answer[-1] = 2
-            elif "price" in column_identifier and not answer[-1]:
-                answer[-1] = 5
-            elif "date" in column_identifier and not answer[-1]:
+            elif (not answer[-1] or answer.upper() not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" == column_identifier:
+                answer[-1] = DEFAULTS[idx]
+            elif "condition" == column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
+               answer[-1] = DEFAULTS[idx]
+            elif "price" == column_identifier and not answer[-1]:
+                answer[-1] = DEFAULTS[idx]
+            elif "date" == column_identifier and not answer[-1]:
                 now = datetime.datetime.now()
                 answer[-1] = int("%d%02d" % (now.year % 100, now.month))
             break
