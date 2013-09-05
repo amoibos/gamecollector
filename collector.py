@@ -9,6 +9,8 @@ import gzip
 import platform
 import shutil
 
+#FIXME: after insert umlaut in python 3 and stored with python 2
+
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
@@ -18,8 +20,8 @@ if sys.version_info[0] >= 3:
    raw_input = input
 
 DEFAULTS = ("NOT EMPTY", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "", "")
-COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
-         "price", "condition", "date", "special", "comment")
+COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", "price", 
+                            "condition", "date", "special", "comment")
 YES, NO = ("y", "yes"), ("n", "no")
 
 ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
@@ -134,7 +136,7 @@ def _update(cursor, query):
 def update(cursor, where):
     '''ask the user for data for the records specified with where clause(sql injection friendly for fuzzy)'''
     attributes = []
-    answers = ""
+    answers, failed = "", ""
     try:
         rows = list(cursor.execute("select * from collection where %s" % where))
     except sqlite3.OperationalError:
@@ -155,11 +157,11 @@ def update(cursor, where):
             string = "'" if title not in ("price", "condition", "date") else ""
             query = "%s %s=%s%s%s," % (query, title, string, value, string)
         query = "%s where title='%s'" % (query[:-1], row[0])
-        print(_update(cursor, query))
+        failed = _update(cursor, query) 
         if rows_count > 1:
             if raw_input("continue(n): ").lower() in NO:
                 break
-    return "update successful"
+    return "update successful" if not "discard" in failed else failed
                 
 def delete(cursor, where):
     '''deletes records via where part of a sql query(sql injection friendly for fuzzy)'''
