@@ -21,11 +21,12 @@ DEFAULTS = ("NOT EMPTY", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "", "")
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
          "price", "condition", "date", "special", "comment")
 YES, NO = ("y", "yes"), ("n", "no")
-ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
 
+ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
 long_names = False
 
 def db_init(db_name):
+    '''initalization database and creates an empty database if necessary'''
     connection = sqlite3.connect(":memory:")
     connection.text_factory = str
     cursor = connection.cursor()
@@ -40,7 +41,7 @@ def db_init(db_name):
     return connection, cursor
 
 def export(cursor, db_name):
-    answers = ""
+    '''exports all records to utf8 csv file''' #also not committed records
     if db_name:
         try:
             with open(db_name, 'w') as f:
@@ -54,6 +55,7 @@ def export(cursor, db_name):
     return answers
 
 def _import(cursor, db_name):
+    '''imports records from a csv file stored in utf8''' #commit required
     conflicts = 0
     answers = ""
     if os.path.exists(db_name):
@@ -62,7 +64,7 @@ def _import(cursor, db_name):
             for row in reader:
                 try:
                     raw_insert(cursor, row)
-                    answers += "%s added to database\n" % row[0]
+                    answers += "%s records added to database\n" % row[0]
                 except sqlite3.IntegrityError:
                     answers += "%s already in database\n" % row[0]
                     conflicts += 1
@@ -72,6 +74,7 @@ def _import(cursor, db_name):
     return answers
 
 def raw_insert(cursor, values):
+    '''import values into database and is used for user interacted and csv import'''
     answers = ""
     try:
         cursor.execute("insert into collection values (?,?,?,?,?,?,?,?,?,?)", values)
@@ -79,9 +82,10 @@ def raw_insert(cursor, values):
         return "nothing inserted"
     except sqlite3.IntegrityError:
         return "record discard because title already exists"
-    return "one row added"
+    return "one record added"
 
 def insert(cursor):
+    '''ask the user for the inputs in the record'''
     answer = []
     for idx, column_identifier in enumerate(COLUMN_LABELS):
         while True:
@@ -107,7 +111,7 @@ def insert(cursor):
                     answer[-1] = "false"
             elif (not answer[-1] or answer.upper() not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" == column_identifier:
                 answer[-1] = DEFAULTS[idx]
-            elif "condition" == column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
+            elif "condition" in column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
                answer[-1] = DEFAULTS[idx]
             elif "price" == column_identifier and not answer[-1]:
                 answer[-1] = DEFAULTS[idx]
@@ -118,15 +122,17 @@ def insert(cursor):
     return raw_insert(cursor, answer)
     
 def _update(cursor, query):
+    '''update database via sql query'''
     try:
         cursor.execute(query)
     except sqlite3.OperationalError:
         return "nothing updated"
     except sqlite3.IntegrityError:
         return "record discard because title already exists"
-    return "row updated"
+    return "record updated"
     
 def update(cursor, where):
+    '''ask the user for data for the records specified with where clause(sql injection friendly for fuzzy)'''
     attributes = []
     answers = ""
     try:
@@ -134,7 +140,7 @@ def update(cursor, where):
     except sqlite3.OperationalError:
         return "nothing to update"
     rows_count = len(rows)
-    print("%d to update" % rows_count)
+    print("%d records to update" % rows_count)
     for row in rows:
         for index, title in enumerate(COLUMN_LABELS):
             type_text = "" if title in ("price", "condition", "date") else "'"
@@ -156,16 +162,17 @@ def update(cursor, where):
     return "update successful"
                 
 def delete(cursor, where):
-    '''sql injection friendly'''
+    '''deletes records via where part of a sql query(sql injection friendly for fuzzy)'''
     answers = ""
     try:
         cursor.execute("delete from collection where %s" % where)
-        answers = "rows deleted"
+        answers = "records deleted"
     except sqlite3.OperationalError:
         answers =  "nothing deleted"
     return answers
 
 def prettify(value, idx):
+    '''creates fixed column width'''
     if isinstance(value, str) and platform.system() == "Windows" and sys.version_info[0] == 2:
         value = value.decode("utf-8").encode(ENCODING)
     if not long_names:
@@ -174,7 +181,7 @@ def prettify(value, idx):
         return value
         
 def sequel(cursor, where="1=1"):
-    '''sql injection friendly'''
+    '''looking for records via sql querry(injection friendly)'''
     answer_length = 0
     answers = ""
     for idx, column in enumerate(COLUMN_LABELS):
@@ -196,6 +203,7 @@ def sequel(cursor, where="1=1"):
     return "%s%d entries" % (answers, answer_length)
 
 def accept(connection, db_name):
+    '''for commit changes to database'''
     while True:
         try:
             connection.commit()
@@ -208,6 +216,7 @@ def accept(connection, db_name):
                 return "commit aborted"
 
 def calc(dummy, term):
+    '''computes a term'''
     try:
         return eval(term)
     except SyntaxError:
@@ -215,6 +224,7 @@ def calc(dummy, term):
     return "term evaluated"
 
 def gui(conn, cursor, db_name):
+    '''user interaction a central entry point for all functionality'''
     commands = {"sequel": sequel, "import": _import, "export": export,
                         "update": update, "delete": delete, "sequel": sequel,
                         "evaluate": calc, "quit": quit}
@@ -265,6 +275,7 @@ def gui(conn, cursor, db_name):
     return True
  
 def write_back(conn, db_name):
+    '''storage interface which stores a dump with gzip'''
     with gzip.open(db_name, "w") as zf:
         for line in conn.iterdump():
             record = "%s\n" % line 
@@ -277,6 +288,7 @@ def write_back(conn, db_name):
     return True
             
 def main(db_name):
+    '''starts gui and manage fallback for writing the database'''
     conn, cursor = db_init(db_name)
     if gui(conn, cursor, db_name):
         print("%s and application terminated" % accept(conn, db_name))
