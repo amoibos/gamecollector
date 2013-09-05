@@ -17,10 +17,9 @@ __version__ = "0.05"
 if sys.version_info[0] >= 3:
    raw_input = input
 
+DEFAULTS = ("NOT EMPTY", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "", "")
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
          "price", "condition", "date", "special", "comment")
-TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
-                        "region[PAL]", "price[5]", "condition[2]", "date[TODAY]", "special['']", "comment['']")
 YES, NO = ("y", "yes"), ("n", "no")
 ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
 
@@ -84,17 +83,17 @@ def raw_insert(cursor, values):
 
 def insert(cursor):
     answer = []
-    for column_identifier in TABLE_FORMAT_QUESTIONS:
+    for idx, column_identifier in enumerate(COLUMN_LABELS):
         while True:
-            answer.append(raw_input("%s: " % column_identifier))#.encode("utf-8"))
+            answer.append(raw_input("%s[%s]: " % (column_identifier, str(DEFAULTS[idx]))))
             #no empty title
             if not answer[-1] and "title" in column_identifier:
                 answer.pop(-1)
                 continue
             #date, price, condition should be values
-            if column_identifier.split("[")[0] in ("date", "price", "condition") and answer[-1]:
+            if column_identifier in ("date", "price", "condition") and answer[-1]:
                 try:
-                    answer[-1] = int(answer[-1])
+                    answer[-1] = float(answer[-1]) if "price" == column_identifier else int(answer[-1])
                 except ValueError:
                     answer.pop(-1)
                     continue
@@ -122,7 +121,9 @@ def _update(cursor, query):
     try:
         cursor.execute(query)
     except sqlite3.OperationalError:
-        return ""
+        return "nothing updated"
+    except sqlite3.IntegrityError:
+        return "record discard because title already exists"
     return "row updated"
     
 def update(cursor, where):
@@ -135,11 +136,11 @@ def update(cursor, where):
     rows_count = len(rows)
     print("%d to update" % rows_count)
     for row in rows:
-        for index, column_identifier in enumerate(TABLE_FORMAT_QUESTIONS):
-            title = column_identifier.split('[')[0]
+        for index, title in enumerate(COLUMN_LABELS):
             type_text = "" if title in ("price", "condition", "date") else "'"
             answer = raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text))
-            answer = answer.decode(ENCODING).encode("utf-8")
+            if sys.version_info[0] < 3:
+                answer = answer.decode(ENCODING).encode("utf-8")
             if answer:
                 attributes.append((title, answer))
         query = "update collection set "
@@ -152,7 +153,7 @@ def update(cursor, where):
         if rows_count > 1:
             if raw_input("continue(n): ").lower() in NO:
                 break
-    return ""
+    return "update successful"
                 
 def delete(cursor, where):
     '''sql injection friendly'''
@@ -177,7 +178,7 @@ def sequel(cursor, where="1=1"):
     answer_length = 0
     answers = ""
     for idx, column in enumerate(COLUMN_LABELS):
-        answers += "%s|" % prettify(column, idx)
+        answers += "%s|" % prettify(str(column), idx)
     answers += "\n"
     if not long_names:
         for idx, column in enumerate(COLUMN_LABELS):
@@ -187,7 +188,7 @@ def sequel(cursor, where="1=1"):
         for row in cursor.execute("select * from collection where %s" % where):
             answer_length += 1
             for idx, column in enumerate(row):
-                answers += "%s|" % prettify(column, idx)
+                answers += "%s|" % prettify(str(column), idx)
             answers += "\n"
     except sqlite3.OperationalError:
         return "nothing found"
@@ -211,6 +212,7 @@ def calc(dummy, term):
         return eval(term)
     except SyntaxError:
         return "syntax error"
+    return "term evaluated"
 
 def gui(conn, cursor, db_name):
     commands = {"sequel": sequel, "import": _import, "export": export,
@@ -225,7 +227,7 @@ def gui(conn, cursor, db_name):
     while True:
         while True:
             raw_command = raw_input(":> ").strip()
-            if sys.version_info[0] == 2:
+            if sys.version_info[0] < 3:
                 raw_command = raw_command.decode(ENCODING)
             if not raw_command:
                 continue
@@ -267,10 +269,10 @@ def write_back(conn, db_name):
         for line in conn.iterdump():
             record = "%s\n" % line 
             try:
-                    zf.write(record.encode("utf-8") if sys.version_info[0] >= 3 else \
-                        record.decode(ENCODING).encode("utf-8"))
+                zf.write(record.encode("utf-8") if sys.version_info[0] >= 3 else \
+                    record.decode(ENCODING).encode("utf-8"))
             except:
-                print("error occurs during write back")
+                print("during writing back is an error occur")
                 return False
     return True
             
