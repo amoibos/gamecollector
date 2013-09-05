@@ -7,6 +7,9 @@ import csv
 import datetime
 import gzip
 import platform
+import shutil
+#import locale
+
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
@@ -22,8 +25,11 @@ COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region",
 TABLE_FORMAT_QUESTIONS = ("title[NOT EMPTY]",  "box[YES]", "manual[YES]", "cartridge[YES]", 
                         "region[PAL]", "price[5]", "condition[2]", "date[TODAY]", "special['']", "comment['']")
 YES, NO = ("y", "yes"), ("n", "no")
+ENCODING = "cp850"#locale.getpreferredencoding()
+
 
 long_names = False
+
 
 def db_init(db_name):
     connection = sqlite3.connect(":memory:")
@@ -118,7 +124,6 @@ def insert(cursor):
                 now = datetime.datetime.now()
                 answer[-1] = int("%d%02d" % (now.year % 100, now.month))
             break
-
     return raw_insert(cursor, answer)
     
 def _update(cursor, query):
@@ -142,7 +147,7 @@ def update(cursor, where):
             title = column_identifier.split('[')[0]
             type_text = "" if title in ("price", "condition", "date") else "'"
             answer = raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text))
-            answer = answer.decode("cp852").encode("utf-8")
+            answer = answer.decode(ENCODING).encode("utf-8")
             if answer:
                 attributes.append((title, answer))
         query = "update collection set "
@@ -192,8 +197,8 @@ def sequel(cursor, where="1=1"):
             answers += "\n"
     except sqlite3.OperationalError:
         return "nothing found"
-    #if platform.system() == "Windows":
-    #    answer = answers.decode("utf-8")
+    #if platform.system() == "Windows" and sys.version_info[0] == 2:
+    #    answer = answers.encode("utf-8").decode(ENCODING)
     return "%s%d entries" % (answers, answer_length)
 
 def accept(connection, db_name):
@@ -269,14 +274,21 @@ def write_back(conn, db_name):
             try:
                 zf.write(record.encode("utf-8"))
             except UnicodeDecodeError:
-                zf.write(record.decode("cp852").encode("utf-8"))
+                zf.write(record.decode(ENCODING).encode("utf-8"))
+            except:
+                return False
+    return True
             
 def main(db_name):
     conn, cursor = db_init(db_name)
     if gui(conn, cursor, db_name):
         print("%s and application terminated" % accept(conn, db_name))
+        backup_name =  db_name+".bak"
+        shutil.copyfile(db_name, backup_name)
+        os.remove(backup_name if write_back(conn, db_name) else db_name)
+        if not os.path.exists(db_name):
+            os.rename(backup_name, db_name)
     cursor.close()
-    write_back(conn, db_name)
     
 if __name__ == "__main__":
     if len(sys.argv) > 1:
