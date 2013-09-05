@@ -6,11 +6,13 @@ import sqlite3
 import csv
 import datetime
 import gzip
+import platform
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
 __version__ = "0.04"
+
 
 if sys.version_info[0] == 3:
    raw_input = input
@@ -29,7 +31,11 @@ def db_init(db_name):
     cursor = connection.cursor()
     if os.path.exists(db_name):
         with gzip.open(db_name, "rb") as gz:
-            cursor.executescript(gz.read())
+            data = gz.read()
+            try:
+                cursor.executescript(data)
+            except ValueError:
+                cursor.executescript(data.decode("utf-8"))
     else:
         ret = cursor.execute("""create table collection(
                         title primary key, box, manual, cartridge, region, 
@@ -74,17 +80,26 @@ def raw_insert(cursor, values):
         cursor.execute("insert into collection values (?,?,?,?,?,?,?,?,?,?)", values)
     except sqlite3.OperationalError:
         return "nothing inserted"
-    answers = "rows inserted"
-    return answers
+    except sqlite3.IntegrityError:
+        return "record discard because title already exists"
+    return "one row added"
 
 def insert(cursor):
     answer = []
     for column_identifier in TABLE_FORMAT_QUESTIONS:
         while True:
-            answer.append(raw_input("%s: " % column_identifier))
+            answer.append(raw_input("%s: " % column_identifier))#.encode("utf-8"))
+            #no empty title
             if not answer[-1] and "title" in column_identifier:
                 answer.pop(-1)
                 continue
+            #date, price, condition should be values
+            if column_identifier.split("[")[0] in ("date", "price", "condition") and answer[-1]:
+                try:
+                    answer[-1] = int(answer[-1])
+                except ValueError:
+                    answer.pop(-1)
+                    continue
             #boolean types: box, cartridge, manual
             elif "YES" in column_identifier:
                 if not answer[-1] or answer[-1] not in YES + NO:
@@ -104,7 +119,7 @@ def insert(cursor):
                 answer[-1] = int("%d%02d" % (now.year % 100, now.month))
             break
 
-    return "one row added" if not raw_insert(cursor, answer).startswith("nothing") else "error, maybe locked"
+    return raw_insert(cursor, answer)
     
 def _update(cursor, query):
     try:
@@ -127,6 +142,7 @@ def update(cursor, where):
             title = column_identifier.split('[')[0]
             type_text = "" if title in ("price", "condition", "date") else "'"
             answer = raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text))
+            answer = answer.decode("cp852").encode("utf-8")
             if answer:
                 attributes.append((title, answer))
         query = "update collection set "
@@ -176,6 +192,8 @@ def sequel(cursor, where="1=1"):
             answers += "\n"
     except sqlite3.OperationalError:
         return "nothing found"
+    #if platform.system() == "Windows":
+    #    answer = answers.decode("utf-8")
     return "%s%d entries" % (answers, answer_length)
 
 def accept(connection, db_name):
@@ -212,7 +230,7 @@ def gui(conn, cursor, db_name):
             if not raw_command:
                 continue
             command = raw_command.lower().split()[0]
-            if command in alias.keys() or command in alias.values():
+            if command in (list(alias.keys()) + list(alias.values())):
                 parameter = raw_command[len(command) + 1:].strip()
                 command = alias[command] if len(command) == 1 else command
                 break
@@ -237,7 +255,7 @@ def gui(conn, cursor, db_name):
         elif read_only and command in ("import", "update", "delete", "add"):
             print("currently in read only mode")
         elif command == alias["a"]:
-            insert(cursor)
+            print(insert(cursor))
         elif command == alias["l"]:
             print(sequel(cursor))   
         else:
@@ -247,7 +265,11 @@ def gui(conn, cursor, db_name):
 def write_back(conn, db_name):
     with gzip.open(db_name, "w") as zf:
         for line in conn.iterdump():
-            zf.write("%s\n" % line)
+            record = "%s\n" % line 
+            try:
+                zf.write(record.encode("utf-8"))
+            except UnicodeDecodeError:
+                zf.write(record.decode("cp852").encode("utf-8"))
             
 def main(db_name):
     conn, cursor = db_init(db_name)
