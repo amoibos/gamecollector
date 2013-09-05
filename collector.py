@@ -14,7 +14,7 @@ __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
 __version__ = "0.05"
 
-if sys.version_info[0] == 3:
+if sys.version_info[0] >= 3:
    raw_input = input
 
 COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", 
@@ -33,10 +33,7 @@ def db_init(db_name):
     if os.path.exists(db_name):
         with gzip.open(db_name, "rb") as gz:
             data = gz.read()
-            try:
-                cursor.executescript(data)
-            except ValueError:
-                cursor.executescript(data.decode("utf-8"))
+            cursor.executescript(data if sys.version_info[0] < 3 else data.decode("utf-8"))
     else:
         ret = cursor.execute("""create table collection(
                         title primary key, box, manual, cartridge, region, 
@@ -270,10 +267,8 @@ def write_back(conn, db_name):
         for line in conn.iterdump():
             record = "%s\n" % line 
             try:
-                if sys.version_info[0] == 3:
-                    zf.write(record.encode("utf-8"))
-                else:
-                    zf.write(record.decode(ENCODING).encode("utf-8"))
+                    zf.write(record.encode("utf-8") if sys.version_info[0] >= 3 else \
+                        record.decode(ENCODING).encode("utf-8"))
             except:
                 print("error occurs during write back")
                 return False
