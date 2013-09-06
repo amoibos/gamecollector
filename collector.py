@@ -9,9 +9,6 @@ import gzip
 import platform
 import shutil
 
-#FIXME: after insert umlaut in python 3 and stored with python 2
-#many crashes and corrupted data
-
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
@@ -31,17 +28,27 @@ long_names = False
 def db_init(db_name):
     '''initalization database and creates an empty database if necessary'''
     connection = sqlite3.connect(":memory:")
+    connection.isolation_level = None
     connection.text_factory = str
     cursor = connection.cursor()
+    
+    ret = cursor.execute("""create table collection(
+                    title text primary key, system text not null, box integer not null, manual integer not null, cartridge integer not null, 
+                    region text not null, price real not null, condition integer not null, date integer not null, 
+                    comment text)""")
+    
     if os.path.exists(db_name):
-        with gzip.open(db_name, "rb") as gz:
-            data = gz.read()
-            cursor.executescript(data if sys.version_info[0] < 3 else data.decode("utf-8"))
-    else:
-        ret = cursor.execute("""create table collection(
-                        title primary key, system not null, box not null, manual not null, cartridge not null, 
-                        region not null, price not null, condition not null, date not null, 
-                        comment)""")
+        temp_name = db_name.split(".gz")[0]
+        with gzip.open(db_name, "rb") as zf:
+            with open(temp_name, "wb") as f:
+                f.write(zf.read())
+        raw_input("STOP")
+        _import(connection, temp_name)
+        try:
+            os.remove(temp_name)
+        except OSError:
+            pass
+    
     return connection, cursor
 
 def export(cursor, db_name):
@@ -49,7 +56,7 @@ def export(cursor, db_name):
     if db_name:
         try:
             with open(db_name, 'w') as f:
-                writer = csv.writer(f, delimiter=";")
+                writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_NONNUMERIC)
                 writer.writerows(cursor.execute("select * from collection"))
             answers = "exported to %s" % db_name
         except IOError:
@@ -64,9 +71,10 @@ def _import(cursor, db_name):
     answers = ""
     if os.path.exists(db_name):
         with open(db_name) as f:
-            reader = csv.reader(f, delimiter=";")
+            reader = csv.reader(f, delimiter=";", quoting=csv.QUOTE_NONNUMERIC)
             for row in reader:
                 try:
+                    if len(row) < 2: continue
                     raw_insert(cursor, row)
                     answers += "%s records added to database\n" % row[0]
                 except sqlite3.IntegrityError:
@@ -109,15 +117,17 @@ def insert(cursor):
             #boolean types: box, cartridge, manual
             elif column_identifier in ("box", "cartridge", "manual"):
                 if not answer[-1] or answer[-1] not in YES + NO:
-                    answer[-1] = "true"
+                    answer[-1] = 1
                 elif answer[-1].lower() in YES:
-                    answer[-1] = "true"
+                    answer[-1] = 1
                 elif answer[-1].lower() in NO:
-                    answer[-1] = "false"
+                    answer[-1] = 0
             elif (not answer[-1] or answer[-1].upper() not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" == column_identifier:
                 answer[-1] = DEFAULTS[idx]
             elif "condition" in column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
                answer[-1] = DEFAULTS[idx]
+            elif "system" == column_identifier and not answer[-1]:
+                answer[-1] = DEFAULTS[idx]
             elif "price" == column_identifier and not answer[-1]:
                 answer[-1] = DEFAULTS[idx]
             elif "date" == column_identifier and not answer[-1]:
@@ -206,14 +216,14 @@ def sequel(cursor, where="1=1"):
     
     return "%s%d entries" % (answers, answer_length)
 
-def accept(connection, db_name):
+def accept(cursor, db_name):
     '''for commit changes to database'''
     while True:
         try:
-            if not write_back(connection, db_name):
+            if not write_back(cursor, db_name):
                 #connection.rollback() #remove uncommited records in database 
                 return "commit aborted"
-            connection.commit()
+            #connection.commit()
             return "commited"
         except sqlite3.OperationalError:
             print("database maybe locked")
@@ -250,8 +260,7 @@ def gui(conn, cursor, db_name):
     
     alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import", "o": "rollback",
                 "a": "add", "e": "export",  "?": "help", "u": "update", "=": "evaluate",
-                "l": "list", "x": "exit", "!": "commit", "*": "longnames", "q": "quit",
-                "r": "raw"}
+                "l": "list", "x": "exit", "*": "longnames", "r": "raw"}
                         
     read_only = True
     while True:
@@ -275,16 +284,8 @@ def gui(conn, cursor, db_name):
             print("switch to %s mode" % ("long names" if long_names else "shortened names"))
         elif command == alias["x"]:
             break
-        elif command == alias["!"]:
-            print(accept(conn, db_name))
-        elif command == alias["o"]:
-            conn.rollback()
-            print("rollback to last commit")
         elif command == alias["?"]:
             print(alias)
-        elif command == alias["q"]:
-            print("abort and ignore all chances since last commit")
-            return
         elif read_only and command in ("import", "update", "delete", "add"):
             print("currently in read only mode")
         elif command == alias["a"]:
@@ -295,27 +296,27 @@ def gui(conn, cursor, db_name):
             print(commands[command](cursor, parameter) if parameter else "missing argument")
     return True
  
-def write_back(conn, db_name):
-    '''storage interface which stores a dump with gzip'''
+def write_back(cursor, db_name):
+    '''storage csv file with gzip compression'''
     with gzip.open(db_name, "w") as zf:
-        for line in conn.iterdump():
-            record = "%s\n" % line 
-            try:
-                zf.write(record.encode("utf-8") if sys.version_info[0] >= 3 else \
-                    record.decode(ENCODING).encode("utf-8"))
-            except:
-                print("during writing back is an error occur")
-                return False
+        temp_name = db_name.split(".gz")[0]
+        export(cursor, temp_name)
+        with open(temp_name, "r") as f:
+            zf.write(f.read().encode("utf-8"))
+        try:
+            os.remove(temp_name)
+        except OSError:
+            return False
     return True
             
 def main(db_name):
     '''starts gui and manage fallback for writing the database'''
     conn, cursor = db_init(db_name)
     if gui(conn, cursor, db_name):
-        print("%s and application terminated" % accept(conn, db_name))
+        print("%s and application terminated" % accept(cursor, db_name))
         backup_name =  db_name+".bak"
         shutil.copyfile(db_name, backup_name)
-        os.remove(backup_name if write_back(conn, db_name) else db_name)
+        os.remove(backup_name if write_back(cursor, db_name) else db_name)
         if os.path.exists(backup_name):
             os.rename(backup_name, db_name)
     cursor.close()
