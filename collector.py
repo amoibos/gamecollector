@@ -10,6 +10,7 @@ import platform
 import shutil
 
 #FIXME: after insert umlaut in python 3 and stored with python 2
+#many crashes and corrupted data
 
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
@@ -19,9 +20,9 @@ __version__ = "0.05"
 if sys.version_info[0] >= 3:
    raw_input = input
 
-DEFAULTS = ("NOT EMPTY", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "", "")
-COLUMN_LABELS = ("title", "box", "manual", "cartridge", "region", "price", 
-                            "condition", "date", "special", "comment")
+DEFAULTS = ("NOT EMPTY", "SMS", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "", "")
+COLUMN_LABELS = ("title", "system", "box", "manual", "cartridge", "region", "price", 
+                            "condition", "date", "comment")
 YES, NO = ("y", "yes"), ("n", "no")
 
 ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
@@ -38,8 +39,9 @@ def db_init(db_name):
             cursor.executescript(data if sys.version_info[0] < 3 else data.decode("utf-8"))
     else:
         ret = cursor.execute("""create table collection(
-                        title primary key, box, manual, cartridge, region, 
-                        price, condition, date, special, comment)""")
+                        title primary key, system not null, box not null, manual not null, cartridge not null, 
+                        region not null, price not null, condition not null, date not null, 
+                        comment)""")
     return connection, cursor
 
 def export(cursor, db_name):
@@ -91,7 +93,8 @@ def insert(cursor):
     answer = []
     for idx, column_identifier in enumerate(COLUMN_LABELS):
         while True:
-            answer.append(raw_input("%s[%s]: " % (column_identifier, str(DEFAULTS[idx]))))
+            value = make_unicode_python2(raw_input("%s[%s]: " % (column_identifier, str(DEFAULTS[idx]))))
+            answer.append(value)
             #no empty title
             if not answer[-1] and "title" in column_identifier:
                 answer.pop(-1)
@@ -111,7 +114,7 @@ def insert(cursor):
                     answer[-1] = "true"
                 elif answer[-1].lower() in NO:
                     answer[-1] = "false"
-            elif (not answer[-1] or answer.upper() not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" == column_identifier:
+            elif (not answer[-1] or answer[-1].upper() not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" == column_identifier:
                 answer[-1] = DEFAULTS[idx]
             elif "condition" in column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
                answer[-1] = DEFAULTS[idx]
@@ -146,9 +149,7 @@ def update(cursor, where):
     for row in rows:
         for index, title in enumerate(COLUMN_LABELS):
             type_text = "" if title in ("price", "condition", "date") else "'"
-            answer = raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text))
-            if sys.version_info[0] < 3:
-                answer = answer.decode(ENCODING).encode("utf-8")
+            answer = make_unicode_python2(raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text)))
             if answer:
                 attributes.append((title, answer))
         query = "update collection set "
@@ -167,15 +168,16 @@ def delete(cursor, where):
     '''deletes records via where part of a sql query(sql injection friendly for fuzzy)'''
     answers = ""
     try:
+        amount_records = len(list(cursor.execute("select * from collection")))
         cursor.execute("delete from collection where %s" % where)
-        answers = "records deleted"
+        answers = "%d records deleted" % (amount_records - len(list(cursor.execute("select * from collection"))))
     except sqlite3.OperationalError:
         answers =  "nothing deleted"
     return answers
 
 def prettify(value, idx):
     '''creates fixed column width'''
-    if isinstance(value, str) and platform.system() == "Windows" and sys.version_info[0] == 2:
+    if isinstance(value, str) and platform.system() == "Windows" and sys.version_info[0] < 3:
         value = value.decode("utf-8").encode(ENCODING)
     if not long_names:
         return "{:<18}".format(value[:18]) if COLUMN_LABELS[idx] in ("title", "comment") else "{:<4}".format(str(value)[:4])
@@ -183,7 +185,7 @@ def prettify(value, idx):
         return value
         
 def sequel(cursor, where="1=1"):
-    '''looking for records via sql querry(injection friendly)'''
+    '''looking for records via sql query(injection friendly)'''
     answer_length = 0
     answers = ""
     for idx, column in enumerate(COLUMN_LABELS):
@@ -208,8 +210,10 @@ def accept(connection, db_name):
     '''for commit changes to database'''
     while True:
         try:
+            if not write_back(connection, db_name):
+                #connection.rollback() #remove uncommited records in database 
+                return "commit aborted"
             connection.commit()
-            write_back(connection, db_name)
             return "commited"
         except sqlite3.OperationalError:
             print("database maybe locked")
@@ -225,22 +229,34 @@ def calc(dummy, term):
         return "syntax error"
     return "term evaluated"
 
+def make_unicode_python2(value):
+    return value.decode(ENCODING).encode("utf-8")  if sys.version_info[0] < 3 else value
+
+def raw(cursor, clause):
+    "bypass raw sql query"
+    try:
+        cursor.execute(query)
+    except sqlite3.OperationalError:
+        return "nothing executed"
+    except sqlite3.IntegrityError:
+        return "record discard because dont pass integrity check"
+    return "operation sucessful"
+        
 def gui(conn, cursor, db_name):
     '''user interaction a central entry point for all functionality'''
     commands = {"sequel": sequel, "import": _import, "export": export,
                         "update": update, "delete": delete, "sequel": sequel,
                         "evaluate": calc, "quit": quit}
     
-    alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import",
+    alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import", "o": "rollback",
                 "a": "add", "e": "export",  "?": "help", "u": "update", "=": "evaluate",
-                "l": "list", "x": "exit", "!": "commit", "*": "longnames", "q": "quit"}
+                "l": "list", "x": "exit", "!": "commit", "*": "longnames", "q": "quit",
+                "r": "raw"}
                         
     read_only = True
     while True:
         while True:
-            raw_command = raw_input(":> ").strip()
-            if sys.version_info[0] < 3:
-                raw_command = raw_command.decode(ENCODING)
+            raw_command = make_unicode_python2(raw_input(":> ").strip())
             if not raw_command:
                 continue
             command = raw_command.lower().split()[0]
@@ -261,6 +277,9 @@ def gui(conn, cursor, db_name):
             break
         elif command == alias["!"]:
             print(accept(conn, db_name))
+        elif command == alias["o"]:
+            conn.rollback()
+            print("rollback to last commit")
         elif command == alias["?"]:
             print(alias)
         elif command == alias["q"]:
