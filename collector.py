@@ -9,9 +9,6 @@ import gzip
 import platform
 import shutil
 
-#FIXME: after insert umlaut in python 3 and stored with python 2
-#many crashes and corrupted data
-
 __author__ = "Daniel Oelschlegel"
 __license__ = "new bsdl"
 __copyright__ = "2013, " + __author__ 
@@ -20,12 +17,12 @@ __version__ = "0.05"
 if sys.version_info[0] >= 3:
    raw_input = input
 
-DEFAULTS = ("NOT EMPTY", "SMS", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "", "")
+DEFAULTS = ("NOT EMPTY", "SMS", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "")
 COLUMN_LABELS = ("title", "system", "box", "manual", "cartridge", "region", "price", 
                             "condition", "date", "comment")
 YES, NO = ("y", "yes"), ("n", "no")
 
-ENCODING = "cp850" if platform.system() == "Windows" else "utf-8"
+ENCODING = sys.stdin.encoding if platform.system() == "Windows" else "utf-8"
 long_names = False
 
 def db_init(db_name):
@@ -39,13 +36,13 @@ def db_init(db_name):
             cursor.executescript(data if sys.version_info[0] < 3 else data.decode("utf-8"))
     else:
         ret = cursor.execute("""create table collection(
-                        title primary key, system not null, box not null, manual not null, cartridge not null, 
-                        region not null, price not null, condition not null, date not null, 
-                        comment)""")
+                        title text primary key, system text not null, box integer not null, manual integer not null, 
+                        cartridge integer not null, region text not null, price real not null, 
+                        condition integer not null, date integer not null, comment text)""")
     return connection, cursor
 
 def export(cursor, db_name):
-    '''exports all records to utf8 csv file''' #also not committed records
+    '''exports all records to utf8 csv file'''
     if db_name:
         try:
             with open(db_name, 'w') as f:
@@ -59,7 +56,7 @@ def export(cursor, db_name):
     return answers
 
 def _import(cursor, db_name):
-    '''imports records from a csv file stored in utf8''' #commit required
+    '''imports records from a csv file stored in utf8'''
     conflicts = 0
     answers = ""
     if os.path.exists(db_name):
@@ -93,8 +90,7 @@ def insert(cursor):
     answer = []
     for idx, column_identifier in enumerate(COLUMN_LABELS):
         while True:
-            value = make_unicode_python2(raw_input("%s[%s]: " % (column_identifier, str(DEFAULTS[idx]))))
-            answer.append(value)
+            answer.append(make_unicode_python2(raw_input("%s[%s]: " % (column_identifier, str(DEFAULTS[idx])))))
             #no empty title
             if not answer[-1] and "title" in column_identifier:
                 answer.pop(-1)
@@ -109,15 +105,17 @@ def insert(cursor):
             #boolean types: box, cartridge, manual
             elif column_identifier in ("box", "cartridge", "manual"):
                 if not answer[-1] or answer[-1] not in YES + NO:
-                    answer[-1] = "true"
+                    answer[-1] = 1
                 elif answer[-1].lower() in YES:
-                    answer[-1] = "true"
+                    answer[-1] = 1
                 elif answer[-1].lower() in NO:
-                    answer[-1] = "false"
+                    answer[-1] = 0
             elif (not answer[-1] or answer[-1].upper() not in ("PAL", "USA", "BRA", "JAP", "KOR")) and "region" == column_identifier:
                 answer[-1] = DEFAULTS[idx]
             elif "condition" in column_identifier and (not answer[-1] or not 1 <= int(answer[-1]) <= 6):
                answer[-1] = DEFAULTS[idx]
+            elif "system" == column_identifier and not answer[-1]:
+                answer[-1] = DEFAULTS[idx]
             elif "price" == column_identifier and not answer[-1]:
                 answer[-1] = DEFAULTS[idx]
             elif "date" == column_identifier and not answer[-1]:
@@ -206,14 +204,26 @@ def sequel(cursor, where="1=1"):
     
     return "%s%d entries" % (answers, answer_length)
 
+def make_unicode_python2(value):
+    #TEST REQUIRED UNDER LINUX
+    return value.decode(ENCODING).encode("utf-8") if sys.version_info[0] < 3 else value
+
+def raw(cursor, clause):
+    "bypass raw sql query"
+    try:
+        cursor.execute(query)
+    except sqlite3.OperationalError:
+        return "nothing executed"
+    except sqlite3.IntegrityError:
+        return "record discard because dont pass integrity check"
+    return "operation sucessful"
+
+
 def accept(connection, db_name):
     '''for commit changes to database'''
     while True:
         try:
             if not write_back(connection, db_name):
-                #connection.rollback() #remove uncommited records in database 
-                return "commit aborted"
-            connection.commit()
             return "commited"
         except sqlite3.OperationalError:
             print("database maybe locked")
@@ -229,28 +239,15 @@ def calc(dummy, term):
         return "syntax error"
     return "term evaluated"
 
-def make_unicode_python2(value):
-    return value.decode(ENCODING).encode("utf-8")  if sys.version_info[0] < 3 else value
-
-def raw(cursor, clause):
-    "bypass raw sql query"
-    try:
-        cursor.execute(query)
-    except sqlite3.OperationalError:
-        return "nothing executed"
-    except sqlite3.IntegrityError:
-        return "record discard because dont pass integrity check"
-    return "operation sucessful"
-        
 def gui(conn, cursor, db_name):
     '''user interaction a central entry point for all functionality'''
     commands = {"sequel": sequel, "import": _import, "export": export,
                         "update": update, "delete": delete, "sequel": sequel,
-                        "evaluate": calc, "quit": quit}
+                        "evaluate": calc, "quit": quit, "raw": raw}
     
-    alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import", "o": "rollback",
+    alias = { "s": "sequel", "d": "delete", "+": "switch", "i": "import",
                 "a": "add", "e": "export",  "?": "help", "u": "update", "=": "evaluate",
-                "l": "list", "x": "exit", "!": "commit", "*": "longnames", "q": "quit",
+                "l": "list", "x": "exit", "*": "longnames", 
                 "r": "raw"}
                         
     read_only = True
@@ -275,16 +272,8 @@ def gui(conn, cursor, db_name):
             print("switch to %s mode" % ("long names" if long_names else "shortened names"))
         elif command == alias["x"]:
             break
-        elif command == alias["!"]:
-            print(accept(conn, db_name))
-        elif command == alias["o"]:
-            conn.rollback()
-            print("rollback to last commit")
         elif command == alias["?"]:
             print(alias)
-        elif command == alias["q"]:
-            print("abort and ignore all chances since last commit")
-            return
         elif read_only and command in ("import", "update", "delete", "add"):
             print("currently in read only mode")
         elif command == alias["a"]:
@@ -302,7 +291,7 @@ def write_back(conn, db_name):
             record = "%s\n" % line 
             try:
                 zf.write(record.encode("utf-8") if sys.version_info[0] >= 3 else \
-                    record.decode(ENCODING).encode("utf-8"))
+                    record)
             except:
                 print("during writing back is an error occur")
                 return False
