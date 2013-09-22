@@ -223,8 +223,8 @@ def accept(connection, db_name):
     '''for commit changes to database'''
     while True:
         try:
-            if not write_back(connection, db_name):
-            return "commited"
+            if write_back(connection, db_name):
+                return "commited"
         except sqlite3.OperationalError:
             print("database maybe locked")
             answer = raw_input("try again[yes]: ")
