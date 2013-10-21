@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #encoding:UTF-8
+
 import os
 import sys
 import sqlite3
@@ -87,10 +88,13 @@ def raw_insert(cursor, values):
 
 def insert(cursor):
     '''ask the user for the inputs in the record'''
-    answer = []
+    answer, aborting = [], False
     for idx, column_identifier in enumerate(COLUMN_LABELS):
         while True:
             answer.append(make_unicode_python2(raw_input("%s[%s]: " % (column_identifier, str(DEFAULTS[idx])))))
+            if answer[-1] == "!":
+                aborting = True
+                break
             #no empty title
             if not answer[-1] and "title" in column_identifier:
                 answer.pop(-1)
@@ -122,6 +126,8 @@ def insert(cursor):
                 now = datetime.datetime.now()
                 answer[-1] = int("%d%02d" % (now.year % 100, now.month))
             break
+        if aborting:
+            return
     return raw_insert(cursor, answer)
     
 def _update(cursor, query):
@@ -136,8 +142,7 @@ def _update(cursor, query):
     
 def update(cursor, where):
     '''ask the user for data for the records specified with where clause(sql injection friendly for fuzzy)'''
-    attributes = []
-    answers, failed = "", ""
+    answers, failed, aborting = "", "", False
     try:
         rows = list(cursor.execute("select * from collection where %s" % where))
     except sqlite3.OperationalError:
@@ -145,21 +150,27 @@ def update(cursor, where):
     rows_count = len(rows)
     print("%d records to update" % rows_count)
     for row in rows:
+        attributes = []
         for index, title in enumerate(COLUMN_LABELS):
             type_text = "" if title in ("price", "condition", "date") else "'"
             answer = make_unicode_python2(raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text)))
             if answer:
+                if answer == "!":
+                    aborting = True
+                    break
                 attributes.append((title, answer))
         query = "update collection set "
-        for attribute in attributes:
-            title, value = attribute[0], attribute[1]
-            string = "'" if title not in ("price", "condition", "date") else ""
-            query = "%s %s=%s%s%s," % (query, title, string, value, string)
-        query = "%s where title='%s'" % (query[:-1], row[0])
-        failed = _update(cursor, query) 
-        if rows_count > 1:
-            if raw_input("continue(n): ").lower() in NO:
-                break
+        if not aborting:
+            for attribute in attributes:
+                title, value = attribute[0], attribute[1]
+                string = "'" if title not in ("price", "condition", "date") else ""
+                query = "%s %s=%s%s%s," % (query, title, string, value, string)
+            query = "%s where title='%s'" % (query[:-1], row[0])
+            failed = _update(cursor, query) 
+            if rows_count > 1:
+                if raw_input("continue(y): ").lower() in NO:
+                    break
+                print
     return "update successful" if not "discard" in failed else failed
                 
 def delete(cursor, where):
