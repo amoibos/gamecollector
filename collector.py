@@ -42,13 +42,13 @@ def db_init(db_name):
                         condition integer not null, date integer not null, comment text)""")
     return connection, cursor
 
-def export(cursor, db_name):
+def export(cursor, db_name, sorting_column="title"):
     '''exports all records to utf8 csv file'''
     if db_name:
         try:
             with open(db_name, 'w') as f:
                 writer = csv.writer(f, delimiter=";")
-                writer.writerows(cursor.execute("select * from collection"))
+                writer.writerows(cursor.execute("select * from collection order by ?", sorting_column))
             answers = "exported to %s" % db_name
         except IOError:
             print("inacceptable file name")
@@ -193,7 +193,7 @@ def prettify(value, idx):
     else:
         return value
         
-def sequel(cursor, where="1=1"):
+def sequel(cursor, where="1=1", sorting_column=""):
     '''looking for records via sql query(injection friendly)'''
     answer_length = 0
     answers = ""
@@ -205,7 +205,8 @@ def sequel(cursor, where="1=1"):
             answers += "%s|" % prettify("--------------------", idx)
         answers += "\n"
     try:
-        for row in cursor.execute("select * from collection where %s" % where):
+        order = "order by %s" % sorting_column if sorting_column else ""
+        for row in cursor.execute("select * from collection where %s %s" % (where, order)):
             answer_length += 1
             for idx, column in enumerate(row):
                 answers += "%s|" % prettify(str(column), idx)
@@ -290,7 +291,8 @@ def gui(conn, cursor, db_name):
         elif command == alias["a"]:
             print(insert(cursor))
         elif command == alias["l"]:
-            print(sequel(cursor))   
+            column = parameter.lower().strip() if parameter else ""
+            print(sequel(cursor, sorting_column=column if column in COLUMN_LABELS else ""))   
         else:
             print(commands[command](cursor, parameter) if parameter else "missing argument")
     return True
