@@ -224,7 +224,7 @@ def make_unicode_python2(value):
 def raw(cursor, clause):
     "bypass raw sql query"
     try:
-        cursor.execute(query)
+        cursor.execute(clause)
     except sqlite3.OperationalError:
         return "nothing executed"
     except sqlite3.IntegrityError:
