@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-#encoding:UTF-8
+#encoding: UTF-8
 
+from __future__ import print_function
 import os
 import sys
 import sqlite3
@@ -18,7 +19,7 @@ __version__ = "0.05"
 if sys.version_info[0] >= 3:
    raw_input = input
 
-DEFAULTS = ("NOT EMPTY", "SMS", "YES", "YES", "YES", "PAL", 5, 2, "TODAY", "")
+DEFAULTS = ("NOT EMPTY", "SMS", "1", "1", "1", "PAL", 5, 2, "TODAY", "")
 COLUMN_LABELS = ("title", "system", "box", "manual", "cartridge", "region", "price", 
                             "condition", "date", "comment")
 YES, NO = ("y", "yes"), ("n", "no")
@@ -46,9 +47,9 @@ def export(cursor, db_name, sorting_column="title"):
     '''exports all records to utf8 csv file'''
     if db_name:
         try:
-            with open(db_name, 'w') as f:
+            with open(db_name, 'wb') as f:
                 writer = csv.writer(f, delimiter=";")
-                writer.writerows(cursor.execute("select * from collection order by ?", sorting_column))
+                writer.writerows(cursor.execute("select * from collection order by %s" % sorting_column))
             answers = "exported to %s" % db_name
         except IOError:
             print("inacceptable file name")
@@ -61,7 +62,7 @@ def _import(cursor, db_name):
     conflicts = 0
     answers = ""
     if os.path.exists(db_name):
-        with open(db_name) as f:
+        with open(db_name, "rb") as f:
             reader = csv.reader(f, delimiter=";")
             for row in reader:
                 try:
@@ -170,7 +171,7 @@ def update(cursor, where):
             if rows_count > 1:
                 if raw_input("continue(y): ").lower() in NO:
                     break
-                print
+                print()
     return "update successful" if not "discard" in failed else failed
                 
 def delete(cursor, where):
@@ -291,7 +292,7 @@ def gui(conn, cursor, db_name):
         elif command == alias["a"]:
             print(insert(cursor))
         elif command == alias["l"]:
-            column = parameter.lower().strip() if parameter else ""
+            column = parameter.lower().strip() if parameter else "title"
             print(sequel(cursor, sorting_column=column if column in COLUMN_LABELS else ""))   
         else:
             print(commands[command](cursor, parameter) if parameter else "missing argument")
