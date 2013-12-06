@@ -154,7 +154,8 @@ def update(cursor, where):
         attributes = []
         for index, title in enumerate(COLUMN_LABELS):
             type_text = "" if title in ("price", "condition", "date") else "'"
-            answer = make_unicode_python2(raw_input("%s[%s%s%s]: " % (title, type_text, row[index], type_text)))
+            answer = make_unicode_python2(raw_input("%s[%s%s%s]: " % (title, type_text, 
+                row[index].decode("utf-8").encode(ENCODING), type_text)))
             if answer:
                 if answer == "!":
                     aborting = True
@@ -292,8 +293,18 @@ def gui(conn, cursor, db_name):
         elif command == alias["a"]:
             print(insert(cursor))
         elif command == alias["l"]:
-            column = parameter.lower().strip() if parameter else "title"
-            print(sequel(cursor, sorting_column=column if column in COLUMN_LABELS else ""))   
+            parameter = parameter.lower().strip()
+            user_interaction = False
+            if "/p" in parameter:
+                user_interaction = True
+                parameter = parameter.replace("/p", "")
+            column = parameter.strip() if parameter else "title"
+            for index, line in enumerate(sequel(cursor, 
+                    sorting_column=column if column in COLUMN_LABELS else "").split("\n")):
+                print(line)
+                if user_interaction and (index + 1) % 11 == 10:
+                    if raw_input() == "!": 
+                        break
         else:
             print(commands[command](cursor, parameter) if parameter else "missing argument")
     return True
